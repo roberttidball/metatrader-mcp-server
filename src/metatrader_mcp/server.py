@@ -2,6 +2,7 @@
 import os
 import argparse
 import logging
+import json
 from dotenv import load_dotenv
 
 from mcp.server.fastmcp import FastMCP, Context
@@ -9,8 +10,12 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Optional, Union
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 from metatrader_mcp.utils import init, get_client
+
+FXMACRODATA_BASE_URL = "https://fxmacrodata.com/api/v1"
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 1) Lifespan context definition
@@ -45,6 +50,40 @@ mcp = FastMCP(
 # ────────────────────────────────────────────────────────────────────────────────
 # 3) Register tools with @mcp.tool()
 # ────────────────────────────────────────────────────────────────────────────────
+
+@mcp.tool()
+def get_fxmacrodata_release_calendar(currency: str = "usd", limit: int = 25, min_tier: Optional[int] = 1) -> dict:
+	"""Get official macro release-calendar events for trade planning.
+
+	Use this read-only tool to check market-moving releases such as CPI, NFP,
+	GDP, PCE, retail sales, and central-bank decisions before placing or
+	managing MetaTrader positions.
+	"""
+	limit_count = max(1, min(int(limit), 100))
+	params = {"limit": str(limit_count)}
+	api_key = os.getenv("FXMACRODATA_API_KEY")
+	if api_key:
+		params["api_key"] = api_key
+
+	url = f"{FXMACRODATA_BASE_URL}/calendar/{currency.lower()}?{urlencode(params)}"
+	request = Request(url, headers={"User-Agent": "metatrader-mcp-fxmacrodata/1.0"})
+	with urlopen(request, timeout=20) as response:
+		payload = json.load(response)
+
+	events = payload.get("data", [])
+	if min_tier is not None:
+		events = [
+			event for event in events
+			if int(event.get("market_tier") or 99) <= min_tier
+		]
+
+	events = events[:limit_count]
+	return {
+		"currency": payload.get("currency", currency.upper()),
+		"timezone": payload.get("timezone"),
+		"data_quality": payload.get("data_quality"),
+		"events": events,
+	}
 
 @mcp.tool()
 def get_account_info(ctx: Context) -> dict:
