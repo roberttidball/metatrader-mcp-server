@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 
 from metatrader_mcp.utils import init, get_client
 
-FXMACRODATA_BASE_URL = "https://fxmacrodata.com/api/v1"
+FXMACRODATA_BASE_URL = "https://api.fxmacrodata.com/v1"
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 1) Lifespan context definition
